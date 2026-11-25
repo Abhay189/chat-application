@@ -1,13 +1,24 @@
-import { useState } from "react";
-import { UserRound, ChevronRight, Sun, Moon,Bell, Volume2, Shield, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronRight, Sun, Moon,Bell, Volume2, Shield, LogOut } from "lucide-react";
+import { apiRequest } from "../services/api";
 import ConfirmationDialog from "../components/ConfirmationDialog";
 import "./Settings.css";
 
-function Settings({ onOpenProfile, onLogout }){
+function Settings({ onOpenProfile, onLogout, authToken }){
+  const [account, setAccount] = useState(null);
+  const [accountError, setAccountError] = useState("");
   const[ theme, setTheme] = useState("light");
   const[messageNotifications, setMessageNotifications] = useState(true);
   const[soundEnabled, setSoundEnabled] = useState(true);
   const[showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest("/users/me", { token: authToken })
+      .then((user) => { if (!cancelled) setAccount(user); })
+      .catch((error) => { if (!cancelled) setAccountError(error.message); });
+    return () => { cancelled = true; };
+  }, [authToken]);
 
   const handleLogoutCancel=() =>{
     setShowLogoutDialog(false);
@@ -36,8 +47,16 @@ function Settings({ onOpenProfile, onLogout }){
             onClick={ onOpenProfile }
           >
             <div className="settings-row-info">
-              <h3>Anshika Sharma</h3>
-              <p>@anshi.codes</p>
+              {account ? (
+                <>
+                  <h3>{account.name}</h3>
+                  <p>@{account.username}</p>
+                </>
+              ) : accountError ? (
+                <p role="alert">{accountError}</p>
+              ) : (
+                <p role="status">Loading account...</p>
+              )}
             </div>
             <ChevronRight size={20} />
           </button>

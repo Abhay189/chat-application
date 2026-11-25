@@ -272,9 +272,11 @@ function AppShell() {
             />
 
             {activeView === "profile" ? (
-              <Profile onLogout ={handleLogout} />
+              <Profile key={currentUserId} onLogout={handleLogout} authToken={authToken} />
             ) : activeView === "settings" ? (
               <SettingsPage 
+                key={currentUserId}
+                authToken={authToken}
                 onOpenProfile={()=> setActiveView("profile")}
                 onLogout={handleLogout}
               />  

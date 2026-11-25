@@ -1,18 +1,14 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { apiRequest } from "../services/api";
 import { Pencil , LogOut } from "lucide-react";
 import EditProfile from "./EditProfile";
 import ConfirmationDialog from "../components/ConfirmationDialog";
 import "./Profile.css";
 
 
-const initialProfile = {
-    name: "Anshika Sharma",
-    username: "anshi.codes",
-    email: "anshi@example.com",
-    phone: "+91 98765 43210",
-    dob: "2007-03-14",
-    bio: "UI designer",
-};
+function toProfile(user) {
+  return { ...user, phone: user.phone_no ?? "", dob: user.dob ?? "", bio: user.bio ?? "" };
+}
 
 function formatDate(date){
   if (!date) return "";
@@ -30,23 +26,47 @@ function formatDate(date){
   });
 }
 
-function Profile( {onLogout} ){
-  const [profile, setProfile ] = useState(initialProfile);
+function Profile( {onLogout, authToken} ){
+  const [profile, setProfile ] = useState(null);
+  const [error, setError] = useState("");
   const[isEditing, setIsEditing] = useState(false);
   const[showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest("/users/me", { token: authToken })
+      .then((user) => { if (!cancelled) setProfile(toProfile(user)); })
+      .catch((error) => { if (!cancelled) setError(error.message); });
+    return () => { cancelled = true; };
+  }, [authToken]);
 
   const handleLogoutCancel = () =>{
     setShowLogoutDialog(false);
   };
 
 
-  const handleSave = (updatedProfile) =>{
-    setProfile((previous) => ({
-      ...previous,
-      ...updatedProfile,
-    }));
+  const handleSave = async (updatedProfile) =>{
+    await apiRequest("/users/me", {
+      method: "PUT",
+      token: authToken,
+      body: {
+        name: updatedProfile.name.trim(),
+        username: updatedProfile.username.trim(),
+        phone_no: updatedProfile.phone.trim(),
+        dob: updatedProfile.dob,
+        bio: updatedProfile.bio,
+      },
+    });
+    const user = await apiRequest("/users/me", { token: authToken });
+    setProfile(toProfile(user));
     setIsEditing(false);
   };
+
+  if (!profile) {
+    return <main className="profile-page"><section className="profile-card">
+      {error ? <p role="alert">{error}</p> : <p role="status">Loading profile...</p>}
+    </section></main>;
+  }
 
   if(isEditing) {
     return (
@@ -77,17 +97,17 @@ function Profile( {onLogout} ){
 
           <div className="profile-detail-row">
             <span>Phone</span>
-            <span>{profile.phone}</span>
+            <span>{profile.phone || "Not provided"}</span>
           </div>
 
           <div className="profile-detail-row">
             <span>Date of Birth</span>
-            <span>{formatDate(profile.dob)}</span>
+            <span>{formatDate(profile.dob) || "Not provided"}</span>
           </div>
 
           <div className="profile-detail-row">
             <span>Bio</span>
-            <span>{profile.bio}</span>
+            <span>{profile.bio || "Not provided"}</span>
           </div> 
         </div>
 

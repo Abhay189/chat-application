@@ -256,7 +256,7 @@ def update_current_user():
 
     # Optional fields
     if dob is not None:
-        user.dob = dob
+        user.dob = dob or None
 
     if profile_picture is not None:
         user.profile_picture = profile_picture

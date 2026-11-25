@@ -2,6 +2,8 @@ import { useState } from "react";
 import "./EditProfile.css";
 
 function EditProfile({ profile, onSave, onCancel }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [formData , setFormData] = useState({
     name: profile.name,
     username: profile.username,
@@ -19,9 +21,17 @@ function EditProfile({ profile, onSave, onCancel }) {
     }));
   };
 
-  const handleSubmit = (event)=> {
+  const handleSubmit = async (event)=> {
     event.preventDefault();
-    onSave(formData);
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(formData);
+    } catch (error) {
+      setError(error.message || "Could not save profile.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -100,10 +110,12 @@ function EditProfile({ profile, onSave, onCancel }) {
           </div>
         </div>
 
+        {error && <p role="alert">{error}</p>}
         <div className="edit-profile-actions">
           <button
             type="button"
             className="edit-cancel-button"
+            disabled={saving}
             onClick={onCancel}
           >
             Cancel
@@ -112,8 +124,9 @@ function EditProfile({ profile, onSave, onCancel }) {
           <button 
             type="submit"
             className="edit-save-button"
+            disabled={saving}
           >
-            Save Changes
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </form>
