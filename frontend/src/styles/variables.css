@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   /* =========================
      ChatApp — Light Theme
      ========================= */
@@ -80,6 +81,7 @@
    ========================= */
 
 html[data-theme="dark"] {
+  color-scheme: dark;
   --cream: #241F18;
   --parchment: #1F1B14;
   --parchment-dark: #191510;

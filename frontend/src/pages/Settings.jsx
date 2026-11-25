@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, Sun, Moon,Bell, Volume2, Shield, LogOut } from "lucide-react";
 import { apiRequest } from "../services/api";
+import { saveTheme } from "../services/theme";
 import ConfirmationDialog from "../components/ConfirmationDialog";
 import "./Settings.css";
 
 function Settings({ onOpenProfile, onLogout, authToken }){
   const [account, setAccount] = useState(null);
   const [accountError, setAccountError] = useState("");
-  const[ theme, setTheme] = useState("light");
+  const[ theme, setTheme] = useState(() => document.documentElement.dataset.theme || "light");
+  const selectTheme = (theme) => setTheme(saveTheme(theme));
   const[messageNotifications, setMessageNotifications] = useState(true);
   const[soundEnabled, setSoundEnabled] = useState(true);
   const[showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -84,7 +86,7 @@ function Settings({ onOpenProfile, onLogout, authToken }){
                   theme === "light" ? "selected" :""
                 }`}
                 aria-pressed={theme === "light"}
-                onClick={() => setTheme("light")}
+                onClick={() => selectTheme("light")}
               >
                 <Sun size={17} />
                 Light
@@ -96,7 +98,7 @@ function Settings({ onOpenProfile, onLogout, authToken }){
                   theme === "dark" ? "selected" : ""
                 }`}
                 aria-pressed = {theme === "dark"}
-                onClick={()=> setTheme("dark")}
+                onClick={()=> selectTheme("dark")}
               >
                 <Moon size={17} />
                 Dark
