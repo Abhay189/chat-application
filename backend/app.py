@@ -3,12 +3,13 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import re
 import os 
+from pathlib import Path
 from sqlalchemy import URL
 from models import db, User, Chat, Chat_participant,Messages
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
@@ -53,6 +54,8 @@ def register_user():
     email = data.get("email","").strip().lower()
     password = data.get("password","")
     phone_no = data.get("phone_no")
+    if isinstance(phone_no, str):
+        phone_no = phone_no.strip() or None
     dob = data.get("dob")
     profile_picture = data.get("profile_picture")
     bio= data.get("bio")
@@ -72,7 +75,9 @@ def register_user():
     if len(password) < 8:
         return {"error": "Password must be atleast 8 characters"},400
 
-    if phone_no and not re.fullmatch(r"\d{10}", phone_no):
+    if phone_no is not None and (
+        not isinstance(phone_no, str) or not re.fullmatch(r"[0-9]{10}", phone_no)
+    ):
         return {"error": "Phone number must contain exactly 10 digits"}, 400
 
 
