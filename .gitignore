@@ -3,3 +3,9 @@ backend/venv/
 __pycache__/
 *.pyc
 frontend/.npm-cache/
+
+frontend/test-results/
+frontend/playwright-report/
+frontend/.browser-*.log
+backend/.audit-cache/
+frontend/.env

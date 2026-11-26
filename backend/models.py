@@ -42,7 +42,7 @@ class User(db.Model):
     )
 
     profile_picture = db.Column(
-        db.String(255),
+        db.Text,
         nullable=True
     )
 
@@ -55,6 +55,8 @@ class Chat(db.Model):
     __tablename__ = "chats"
 
     chat_id = db.Column(db.Integer, primary_key= True)
+
+    direct_key = db.Column(db.String(50), unique=True)
 
     created_at= db.Column(
         db.DateTime,
@@ -76,6 +78,8 @@ class Chat_participant(db.Model):
         db.ForeignKey("users.user_id",ondelete="CASCADE"),
         primary_key=True
     )
+
+    last_read_message_id = db.Column(db.Integer, nullable=False, default=0)
 
     joined_at = db.Column(
         db.DateTime,
@@ -124,8 +128,56 @@ class Messages(db.Model):
         nullable = False
     )
 
+    attachment_id = db.Column(db.Integer, db.ForeignKey("attachments.attachment_id", ondelete="SET NULL"))
+
     reply_to_message_id = db.Column(
         db.Integer,
         db.ForeignKey("messages.message_id",ondelete="SET NULL"),
         nullable = True
     )
+
+class Contact(db.Model):
+    __tablename__ = "contacts"
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+
+class AuthSession(db.Model):
+    __tablename__ = "auth_sessions"
+    jti = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class UserSettings(db.Model):
+    __tablename__ = "user_settings"
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    theme = db.Column(db.String(5), nullable=False, default="light")
+    message_notifications = db.Column(db.Boolean, nullable=False, default=True)
+    sound_enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+
+class BlockedUser(db.Model):
+    __tablename__ = "blocked_users"
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    blocked_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+
+
+class Attachment(db.Model):
+    __tablename__ = "attachments"
+    attachment_id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey("chats.chat_id", ondelete="CASCADE"), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+    filename = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(100), nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+
+
+class RateLimit(db.Model):
+    __tablename__ = "rate_limits"
+    key = db.Column(db.String(128), primary_key=True)
+    bucket = db.Column(db.Integer, nullable=False)
+    count = db.Column(db.Integer, nullable=False)

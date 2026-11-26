@@ -41,7 +41,7 @@
   border-radius: 50%;
 
   background: #d27b56;
-  color: var(--white);
+  color: var(--on-accent);
 
   display: flex;
   align-items: center;
@@ -217,7 +217,7 @@
 
 .outgoing .message-bubble {
   background: var(--olive);
-  color: var(--white);
+  color: var(--on-accent);
   border-bottom-right-radius: 5px;
 }
 
@@ -360,7 +360,7 @@
   border-radius: 50%;
 
   background: var(--olive);
-  color: var(--white);
+  color: var(--on-accent);
 
   display: flex;
   align-items: center;
@@ -844,4 +844,16 @@
 .message-actions-wrapper {
   position: relative;
   width: fit-content;
+}
+
+.workspace-header .profile-button { flex: 0 0 auto; }
+.workspace-header .chat-back-button { display: none; }
+.workspace-user { min-width: 0; flex: 1; }
+.workspace-user-info { min-width: 0; }
+.workspace-user-info h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 700px) {
+  .workspace-header { height: auto; min-height: 88px; gap: 10px; padding: 12px; flex-wrap: wrap; }
+  .workspace-header .chat-back-button { display: inline-flex; }
+  .workspace-header .workspace-user { flex-basis: calc(100% - 90px); }
+  .workspace-header > .profile-button:last-child { margin-left: auto; }
 }

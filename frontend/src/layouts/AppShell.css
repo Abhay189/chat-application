@@ -10,7 +10,7 @@
 .navigation-rail {
   width: var(--rail-width);
   background: var(--olive);
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 .chat-sidebar {

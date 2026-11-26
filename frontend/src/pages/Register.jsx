@@ -14,9 +14,11 @@ function Register({ onRegister , onOpenLogin }){
   const [dob, setDob] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event) =>{
     event.preventDefault();
+    if (submitting) return;
     if (
       !name.trim() ||
       !username.trim() ||
@@ -28,8 +30,9 @@ function Register({ onRegister , onOpenLogin }){
     }
     setError("");
 
+    setSubmitting(true);
     try{
-      const result = await registerUser({
+      await registerUser({
         name: name.trim(),
         username: username.trim(),
         email: email.trim(),
@@ -47,6 +50,8 @@ function Register({ onRegister , onOpenLogin }){
       }
     } catch (error) {
       setError(error.message || "Registration failed. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -173,6 +178,7 @@ function Register({ onRegister , onOpenLogin }){
           <button
             type="submit"
             className="auth-submit"
+            disabled={submitting}
           > 
             Create Account
           </button>

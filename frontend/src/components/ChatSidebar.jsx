@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { apiRequest } from "../services/api";
+import { useState } from "react";
 import { MessageCircle, Search , Plus  } from "lucide-react";
 import NewChatModal from "./NewChatModal";
 import "./ChatSidebar.css";
@@ -8,42 +7,6 @@ function ChatSidebar({ chats , selectedChat , setSelectedChat, onNewChat,authTok
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
-  const [apiChats, setApiChats] = useState([]);
-  const [chatsError, setChatsError] = useState("");
-
-
-  useEffect(()=>{
-    if(!authToken) return;
-
-    const fetchChats = async ()=> {
-      try{
-        setChatsError("");
-
-        const data = await apiRequest("/chats",{
-          token: authToken,
-        });
-        console.log("chats api response:",data);
-
-        const formattedChats = data.chats.map((chat)=>({
-          id: chat.chat_id,
-          name: chat.other_user.name || chat.other_user.username,
-          message: "",
-          unread:0,
-          avatar: (chat.other_user.name || chat.other_user.username)
-            .charAt(0)
-            .toUpperCase(),
-          avatarColor: "avatar-olive",
-        }));
-
-        setApiChats(formattedChats);
-      } catch (error){
-        setChatsError(error.message || "Could not load chats.");
-      }
-    };
-    fetchChats();
-  },[authToken]);
-
-
   const filteredChats = chats.filter((chat)=>{
     const query = searchQuery.toLowerCase().trim();
 
@@ -95,10 +58,6 @@ function ChatSidebar({ chats , selectedChat , setSelectedChat, onNewChat,authTok
       </div>
 
       {/* Chat List */}
-
-      {chatsError && (
-        <p className="auth-error">{chatsError}</p>
-      )}
 
       <div className="chat-list">
 
@@ -161,8 +120,8 @@ function ChatSidebar({ chats , selectedChat , setSelectedChat, onNewChat,authTok
         <NewChatModal
         authToken={authToken}
         onClose ={()=> setIsNewChatOpen(false)}
-        onSelectContact={(contact)=>{
-          onNewChat(contact);
+        onSelectContact={async (contact)=>{
+          await onNewChat(contact);
           setIsNewChatOpen(false);
         }}
         />

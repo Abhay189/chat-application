@@ -1,625 +1,172 @@
-import { useState, useRef, useEffect } from "react";
-import { Paperclip, Smile , Send, MoreVertical, MessageCircle, MoveDownRight,Reply, Pencil,Trash2 } from "lucide-react";
-import { apiRequest } from "../services/api";
-import EmojiPicker from "emoji-picker-react";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
+import { Paperclip, Smile, Send, MessageCircle, Pencil, Trash2, Reply } from "lucide-react";
+import { apiRequest, API_BASE_URL } from "../services/api";
+const EmojiPicker = lazy(() => import("emoji-picker-react"));
 import ConfirmationDialog from "./ConfirmationDialog";
 import "./ChatWorkspace.css";
 
+function ChatWorkspace({ chats, selectedChat, currentUserId, onChatChanged, onBack }) {
+  const chat = chats.find((item) => item.id === selectedChat);
+  const [messages, setMessages] = useState([]);
+  const [messageText, setMessageText] = useState("");
+  const [emoji, setEmoji] = useState(false);
+  const [file, setFile] = useState(null);
+  const [reply, setReply] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(Boolean(selectedChat));
+  const [hasMore, setHasMore] = useState(false);
+  const revision = useRef(0);
+  const busy = useRef(false);
+  const alive = useRef(false);
+  const end = useRef(null);
+  const fileInput = useRef(null);
+  const previousLast = useRef(null);
+  const messagesRef = useRef([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-function ChatWorkspace({ chats, selectedChat, setChatData, authToken, currentUserId }) {
- 
-  const selectedChatData =chats.find(
-    (chat) => chat.id === selectedChat
-  );
-
-  const [messageText , setMessageText] = useState("");
-  const[showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const[activeMessageMenu , setActiveMessageMenu] = useState(null);
-  const[replyingTo, setReplyingTo] = useState(null);
-  const[editingMessage, setEditingMessage] = useState(null);
-  const[messageToDelete, setMessageToDelete] = useState(null);
-
-  const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const messageActionRefs = useRef({});
-
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
-  },[selectedChatData?.messages, selectedChat]);
-
-  
-  useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (activeMessageMenu === null) return;
-
-      const openMenuElement =
-        messageActionRefs.current[activeMessageMenu];
-
-      if (
-        openMenuElement &&
-        !openMenuElement.contains(event.target)
-      ) {
-        setActiveMessageMenu(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
-  }, [activeMessageMenu]);
-
-  
-  useEffect(() => {
-    setMessageText("");
-    setReplyingTo(null);
-    setEditingMessage(null);
-    setSelectedFile(null);
-    setShowEmojiPicker(false);
-    setActiveMessageMenu(null);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+  const refresh = useCallback(async () => {
+    if (!selectedChat) return;
+    const version = revision.current;
+    const oldest = messagesRef.current[0]?.message_id;
+    let data = await apiRequest(`/chats/${selectedChat}/messages?limit=100`);
+    let rows = data.messages;
+    while (oldest && data.has_more && rows[0]?.message_id > oldest && alive.current && version === revision.current) {
+      data = await apiRequest(`/chats/${selectedChat}/messages?limit=100&before=${rows[0].message_id}`);
+      rows = [...data.messages, ...rows];
+    }
+    if (!alive.current || version !== revision.current) return;
+    setMessages(oldest ? rows.filter((item) => item.message_id >= oldest) : rows);
+    setHasMore(data.has_more || Boolean(oldest && rows.some((item) => item.message_id < oldest)));
+    setLoading(false);
+    const latest = rows.at(-1);
+    if (latest && document.visibilityState === "visible") {
+      await apiRequest(`/chats/${selectedChat}/read`, { method: "POST", body: { message_id: latest.message_id } });
     }
   }, [selectedChat]);
 
-  useEffect(()=>{
-    if(!selectedChat || !authToken){
-      return;
-    }
-
-    let isActive = true;
-    const fetchMessages = async ()=>{
-      try{
-        const data = await apiRequest(`/chats/${selectedChat}/messages`,{
-          token: authToken
-        });
-
-        if (!isActive) return;
-
-        const messageMap = new Map(
-          data.messages.map((message)=> [
-            message.message_id,
-            message,
-          ])
-        );
-
-        const formattedMessages = data.messages.map((message)=>{
-          const originalMessage = message.reply_to_message_id
-          ? messageMap.get(message.reply_to_message_id)
-          : null;
-
-        return {
-          id: message.message_id,
-          type:
-            Number(message.sender_id) === Number(currentUserId)
-              ? "outgoing"
-              : "incoming",
-          content: message.content,
-          time: message.sent_at
-            ? new Date(message.sent_at).toLocaleTimeString([],{
-              hour: "2-digit",
-              minute: "2-digit",
-              })
-            : "",
-            replyTo: originalMessage 
-              ? {
-                id: originalMessage.message_id,
-                content: originalMessage.content,
-                author:
-                  Number(originalMessage.sender_id) === Number(currentUserId)
-                    ? "You"
-                    : selectedChatData?.name,
-                }
-              : null,
-          };
-        });
-
-        setChatData((previousChats)=>
-          previousChats.map((chat)=>
-            chat.id === selectedChat
-            ? {...chat, messages: formattedMessages}
-            : chat
-        ));
-      } catch(error){
-        console.error("Couldnt load messages:",error);
-      }
+  useEffect(() => {
+    alive.current = true;
+    let timer;
+    const poll = async () => {
+      try { if (!busy.current) await refresh(); }
+      catch (error) { if (alive.current) { setError(error.message); setLoading(false); } }
+      if (alive.current) timer = setTimeout(poll, 2500);
     };
-    fetchMessages();
+    poll();
+    return () => { alive.current = false; revision.current += 1; clearTimeout(timer); };
+  }, [refresh]);
+  useEffect(() => {
+    const latest = messages.at(-1)?.message_id;
+    if (latest && latest !== previousLast.current) end.current?.scrollIntoView({ behavior: "smooth" });
+    previousLast.current = latest;
+  }, [messages]);
 
-    return () => {
-      isActive = false;
-    };
-  }, [selectedChat,authToken,currentUserId, setChatData]);
-
-
-  const handleSend = async () => {
-    if (!messageText.trim()){ 
-      return;
-    }
-    const trimmedText = messageText.trim();
-
-    if (editingMessage) {
-      setChatData((previousChats)=>
-        previousChats.map((chat) =>{
-          if (chat.id !== selectedChat){
-            return chat;
-          }
-          
-          const updatedMessages = chat.messages.map((message)=>
-            message.id === editingMessage.id ? {...message, content: trimmedText} : message
-          );
-
-          const latestMessage = updatedMessages[updatedMessages.length - 1];
-          return {
-            ...chat,
-            messages: updatedMessages,
-            message:latestMessage?.content ?? "",
-          };
-        })
-      );
-      setEditingMessage(null);
-      setMessageText("");
-      return;
-    }
-
-//Normal send message
-    try{
-      const result = await apiRequest(
-        `/chats/${selectedChat}/messages`,{
-          method: "POST",
-          token: authToken,
-          body: {
-            content: trimmedText,
-            message_type:"text",
-            reply_to_message_id: replyingTo?.id ?? null,
-          },
+  const mutate = async (operation) => {
+    if (busy.current) return;
+    busy.current = true; revision.current += 1; setPending(true); setError("");
+    try {
+      await operation();
+      revision.current += 1;
+      if (!alive.current) return;
+      await refresh();
+      await onChatChanged();
+    } catch (error) { if (alive.current) setError(error.message); }
+    finally { busy.current = false; if (alive.current) setPending(false); }
+  };
+  const send = () => {
+    if ((!messageText.trim() && !file) || chat?.blocked) return;
+    mutate(async () => {
+      if (editing) {
+        await apiRequest(`/messages/${editing.message_id}`, { method: "PUT", body: { content: messageText.trim() } });
+      } else {
+        let attachmentId = null;
+        if (file) {
+          const form = new FormData(); form.append("file", file);
+          const upload = await apiRequest(`/chats/${selectedChat}/attachments`, { method: "POST", body: form });
+          attachmentId = upload.attachment_id;
         }
-      );
-      const newMessage = {
-        id: result.message_id,
-        type: "outgoing",
-        content: trimmedText,
-        time: new Date().toLocaleTimeString([],{
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        replyTo: replyingTo
-          ? {
-              id: replyingTo.id,
-              content: replyingTo.content,
-              author:
-                replyingTo.type === "outgoing"
-                  ? "You"
-                  : selectedChatData.name,
-            }
-          : null,
-      };
-
-      setChatData((previousChats)=>
-        previousChats.map((chat)=>
-          chat.id === selectedChat
-          ? {
-            ...chat,
-            message: newMessage.content,
-            time: newMessage.time,
-            messages: [...chat.messages, newMessage],
-          }
-          : chat
-        )
-      );
-      setMessageText("");
-      setReplyingTo(null);
-    } catch(error){
-      console.error("Could not send message:",error);
-    }
+        await apiRequest(`/chats/${selectedChat}/messages`, { method: "POST", body: { content: messageText.trim(), reply_to_message_id: reply?.message_id ?? null, attachment_id: attachmentId } });
+      }
+      if (alive.current) {
+        setMessageText(""); setReply(null); setEditing(null); setFile(null);
+        if (fileInput.current) fileInput.current.value = "";
+      }
+    });
+  };
+  const loadOlder = async () => {
+    if (busy.current || !messages.length) return;
+    busy.current = true; revision.current += 1; setPending(true);
+    try {
+      const data = await apiRequest(`/chats/${selectedChat}/messages?limit=100&before=${messages[0].message_id}`);
+      if (alive.current) { setMessages((previous) => [...data.messages, ...previous]); setHasMore(data.has_more); }
+    } catch (error) { if (alive.current) setError(error.message); }
+    finally { busy.current = false; if (alive.current) setPending(false); }
   };
 
-  if (!selectedChatData) {
-  return (
-    <main className="chat-workspace">
-      <div className="empty-chat">
-        <div className="empty-chat-icon">
-          <MessageCircle size={30} strokeWidth={1.8} />
-        </div>
-        <h3>Select a conversation</h3>
-        <p>Choose a chat from the sidebar to start messaging.</p>
+  if (!chat) return <main className="chat-workspace"><div className="empty-chat"><MessageCircle size={30} /><h3>Select a conversation</h3><p>Add a contact using the + button to start chatting.</p></div></main>;
+  return <main className="chat-workspace">
+    <header className="workspace-header">
+      <button className="chat-back-button profile-button" onClick={onBack}>Back</button>
+      <div className="workspace-user"><div className={`workspace-avatar ${chat.avatarColor}`}>{chat.avatar}</div><div className="workspace-user-info"><h2>{chat.name}</h2><span>{chat.blocked ? "Conversation blocked" : "Conversation"}</span></div></div>
+      <button className="profile-button" disabled={pending} onClick={() => mutate(async () => {
+        await apiRequest(`/users/me/blocked/${chat.contactId}`, { method: chat.blockedByMe ? "DELETE" : "PUT" });
+      })}>{chat.blockedByMe ? "Unblock contact" : "Block contact"}</button>
+    </header>
+    {error && <p className="auth-error" role="alert">{error}</p>}
+    <section className="messages-area">
+      {hasMore && <button className="profile-button" disabled={pending} onClick={loadOlder}>Load older messages</button>}
+      <div className="messages-list">
+        {loading ? <p role="status">Loading messages...</p> : messages.length === 0 ? <div className="empty-chat"><h3>No messages yet</h3><p>Say hello to {chat.name}.</p></div> : messages.map((message) => {
+          const outgoing = message.sender_id === currentUserId;
+          const original = messages.find((item) => item.message_id === message.reply_to_message_id);
+          return <div className={`message-row ${outgoing ? "outgoing" : "incoming"}`} key={message.message_id}>
+            <div className="message-group">
+              <div className="message-bubble">
+                {message.reply_to_message_id && <div className="message-reply-quote">{original?.content || "Earlier message"}</div>}
+                <div className="message-content">{message.content}</div>
+                {message.attachment_id && <a className="attachment-download" href={`${API_BASE_URL}/attachments/${message.attachment_id}`} download>Download attachment</a>}
+              </div>
+              <div className="message-time">{new Date(message.sent_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
+              <div className="message-tools">
+                <button disabled={pending || chat.blocked} aria-label="Reply to message" onClick={() => { setReply(message); setEditing(null); }}><Reply size={14} /></button>
+                {outgoing && <>
+                  <button disabled={pending || chat.blocked} aria-label="Edit message" onClick={() => { setEditing(message); setMessageText(message.content); setReply(null); setFile(null); }}><Pencil size={14} /></button>
+                  <button disabled={pending} aria-label="Delete message" onClick={() => setDeleting(message)}><Trash2 size={14} /></button>
+                </>}
+              </div>
+            </div>
+          </div>;
+        })}
+        <div ref={end} />
       </div>
-    </main>
-  );
-}
-
-  return (
-    <main className="chat-workspace">
-
-      {/* =========================
-          Chat Header
-          ========================= */}
-
-      <header className="workspace-header">
-
-        <div className="workspace-user">
-          <div className={`workspace-avatar ${selectedChatData.avatarColor}`}>
-            {selectedChatData.avatar}
-          </div>
-
-          <div className="workspace-user-info">
-            <h2>{selectedChatData.name}</h2>
-            <span>Conversation</span>
-          </div>
-        </div>
-
-        <button
-          className="workspace-menu" aria-label="More options">
-          <MoreVertical size={20}/>
-        </button>
-
-      </header>
-
-      {/* =========================
-          Messages
-          ========================= */}
-
-      <section className="messages-area">
-
-        <div className="date-divider">
-          <span>Today</span>
-        </div>
-
-        <div className="messages-list">
-
-        {selectedChatData.messages.length > 0 ? ( 
-          selectedChatData.messages.map((message) => {
-            if (message.type === "incoming-reply") {
-              return (
-                <div
-                  className="message-row incoming"
-                  key={message.id}
-                >
-                  <div className="message-group">
-
-                    <div className="reply-bubble">
-                      <div className="reply-author">
-                        {message.replyAuthor}
-                      </div>
-
-                      <div className="reply-text">
-                        {message.replyTo}
-                      </div>
-                    </div>
-
-                    <div className="message-time">
-                      {message.time}
-                    </div>
-
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div className={`message-row ${message.type}`}
-                key={message.id}
-              >
-                <div className="message-group">
-
-                  <div className="message-bubble">
-                    {message.replyTo && (
-                      <div className="message-reply-quote">
-                        <div className="message-reply-author">
-                          {message.replyTo.content}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="message-content">
-                      {message.content}
-                    </div>
-                  </div>
-
-                  <div
-                    className="message-actions-wrapper"
-                    ref={(element) => {
-                      if (element) {
-                        messageActionRefs.current[message.id] = element;
-                      } else {
-                        delete messageActionRefs.current[message.id];
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="message-menu-trigger"
-                      aria-label="Message actions"
-                      onClick={()=>
-                        setActiveMessageMenu(
-                          activeMessageMenu === message.id? null : message.id
-                        )
-                      }
-                    >
-                      <MoreVertical size ={16}/>
-                    </button>
-
-              
-                    {activeMessageMenu === message.id && (
-                      <div className="message-actions-menu">
-                        <button
-                          onClick={()=>{
-                            setReplyingTo(message);
-                            setActiveMessageMenu(null);
-                          }}
-                        >
-                          Reply
-                        </button>
-
-                        {message.type === "outgoing" &&(
-                          <>
-                          <button
-                            type="button"
-                            onClick={()=>{
-                              setEditingMessage(message);
-                              setMessageText(message.content);
-                              setActiveMessageMenu(null);
-                            }}
-                          >
-                            <Pencil size={15} />
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={()=>{
-                              setMessageToDelete(message);
-                              setActiveMessageMenu(null);
-                            }}
-                            >
-                              <Trash2 size={15}/>
-                              Delete
-                          </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  
-                  <div className="message-time">
-                    {message.time}
-                  </div>
-
-                </div>
-              </div>
-            );
-          })
-        ):(
-          <div className="empty-chat">
-            <div className ="empty-chat-icon">
-              <MessageCircle size={30} strokeWidth={1.8} />
-              </div>
-            <h3>No messages yet</h3>
-            <p>
-              Say hello to {selectedChatData.name} to start the conversation.
-              
-            </p>
-          </div>
-          )}
-
-          <div ref= {messagesEndRef}/>
-
-        </div>
-
-      </section>
-
-      {/* =========================
-          Composer
-          ========================= */}
-
-      <div className="composer-area">
-
-        <input 
-          ref={fileInputRef}
-          type = "file"
-          hidden
-          onChange={(event)=>{
-            const file = event.target.files?.[0];
-
-            if (file){
-              setSelectedFile(file);
-            }
-          }}
-        />
-
-        {selectedFile && (
-          <div className="selected-file">
-            <div className="selected-file-icon">
-              <Paperclip size={22}/>
-            </div>
-
-            <div className="selected-file-info">
-              <span className="selected-file-name">
-                {selectedFile.name}
-              </span>
-
-              <span className="selected-file-label">
-                Attachment ready
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="remove-attachment"
-              aria-label="Remove attachment"
-              onClick={()=>{
-                setSelectedFile(null);
-
-                if (fileInputRef.current) {
-                  fileInputRef.current.value="";
-                }
-              }}
-            >
-              x
-            </button>
-          </div>
-        )}
-
-        {replyingTo && (
-          <div className="reply-preview">
-            <div className="reply-preview-content">
-              <span className="reply-preview-label">
-                Replying to {replyingTo.type === "outgoing" ? "yourself" : selectedChatData.name}
-              </span>
-
-              <span className="reply-preview-text">
-                {replyingTo.content}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="reply-preview-cancel"
-              aria-label="Cancel reply"
-              onClick={()=> setReplyingTo(null)}
-            >
-              x
-            </button>
-          </div>
-        )}
-
-        {showEmojiPicker && (
-          <div className="emoji-picker-container">
-            <EmojiPicker
-              onEmojiClick={(emojiData)=>{
-                setMessageText((previous)=> previous + emojiData.emoji);
-                setShowEmojiPicker(false);
-              }}
-            />
-          </div>
-        )}
-
-
-        {editingMessage && (
-          <div className="editing-message-banner">
-            <div className="editing-message-info">
-              <Pencil size={17}/>
-              <div className="editing-message-text">
-                <span className="editing-message-title">
-                  Editing Message
-                </span>
-
-                <span className="editing-message-preview">
-                  {editingMessage.content}
-                </span>
-
-              </div>
-            </div>
-
-            <button 
-              type="button"
-              className="cancel-edit-button"
-              aria-label="Cancel editing"
-              onClick={()=>{
-                setEditingMessage(null);
-                setMessageText("");
-              }}
-            >
-              x
-            </button>
-          </div>
-        )}
-
-        <div className="message-composer">
-
-          <button
-            className="composer-action"
-            aria-label="Attach file"
-            onClick={()=> fileInputRef.current?.click()}
-          >
-            <Paperclip size={20}/>
-          </button>
-
-          <input
-            type="text"
-            placeholder="Type a message..."
-            aria-label="Message"
-            value = {messageText}
-            onChange = {(event)=> setMessageText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter"){
-                event.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-
-          <button
-            type ="button"
-            className="composer-action"
-            aria-label="Emoji"
-            onClick={()=> setShowEmojiPicker((previous) => !previous)}
-          >
-            <Smile size={20}/>
-          </button>
-
-          <button
-            className="send-button"
-            aria-label="Send message"
-            onClick={handleSend}
-          >
-            <Send size={19}/>
-          </button>
-        </div>
+    </section>
+    <div className="composer-area">
+      {chat.blocked && <p role="status">Messages cannot be sent while either participant has blocked the other.</p>}
+      {file && <div className="selected-file"><span>{file.name}</span><button disabled={pending} onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ""; }}>Remove attachment</button></div>}
+      {(reply || editing) && <div className="reply-preview"><span>{editing ? "Editing" : "Replying to"}: {(editing || reply).content}</span><button disabled={pending} onClick={() => { setReply(null); setEditing(null); setMessageText(""); }}>Cancel</button></div>}
+      {emoji && <Suspense fallback={<p role="status">Loading emoji picker...</p>}><EmojiPicker theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"} onEmojiClick={(item) => { setMessageText((previous) => previous + item.emoji); setEmoji(false); }} /></Suspense>}
+      <input ref={fileInput} type="file" hidden onChange={(event) => {
+        const selected = event.target.files?.[0];
+        if (selected?.size > 5 * 1024 * 1024) { setError("Attachments must be at most 5 MB."); event.target.value = ""; return; }
+        setFile(selected || null);
+      }} />
+      <div className="message-composer">
+        <button className="composer-action" disabled={pending || Boolean(editing) || chat.blocked} aria-label="Attach file" onClick={() => fileInput.current?.click()}><Paperclip size={20} /></button>
+        <input aria-label="Message" placeholder="Type a message..." maxLength={10000} disabled={pending || chat.blocked} value={messageText} onChange={(event) => setMessageText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+        <button className="composer-action" disabled={pending || chat.blocked} aria-label="Emoji" onClick={() => setEmoji((previous) => !previous)}><Smile size={20} /></button>
+        <button className="send-button" disabled={pending || chat.blocked || (!messageText.trim() && !file)} aria-label={editing ? "Save message" : "Send message"} onClick={send}><Send size={19} /></button>
       </div>
-        {messageToDelete && (
-          <ConfirmationDialog
-            title="Delete message?"
-            description="Are you sure you want to delete this message? This action cannot be undone."
-            confirmLabel="Delete"
-            cancelLabel="Cancel"
-            danger={true}
-            onCancel={() => setMessageToDelete(null)}
-            onConfirm={() => {
-              const messageId = messageToDelete.id;
-
-              setChatData((previousChats) =>
-                previousChats.map((chat) => {
-                  if (chat.id !== selectedChat) return chat;
-
-                  const updatedMessages = chat.messages.filter(
-                    (item) => item.id !== messageId
-                  );
-
-                  const latestMessage =
-                    updatedMessages[updatedMessages.length - 1];
-
-                  return {
-                    ...chat,
-                    messages: updatedMessages,
-                    message: latestMessage?.content ?? "No messages yet",
-                    time: latestMessage?.time ?? "",
-                  };
-                })
-              );
-
-              if (editingMessage?.id === messageId) {
-                setEditingMessage(null);
-                setMessageText("");
-              }
-
-              if (replyingTo?.id === messageId) {
-                setReplyingTo(null);
-              }
-
-              setMessageToDelete(null);
-            }}
-          />
-      )}
-    </main>
-  );
+    </div>
+    {deleting && <ConfirmationDialog title="Delete message?" description="This deletes the message for both participants." confirmLabel="Delete" cancelLabel="Cancel" danger onCancel={() => setDeleting(null)} onConfirm={() => {
+      const id = deleting.message_id; setDeleting(null);
+      mutate(async () => {
+        await apiRequest(`/messages/${id}`, { method: "DELETE" });
+        if (alive.current) { setMessages((previous) => previous.filter((item) => item.message_id !== id)); if (editing?.message_id === id) { setEditing(null); setMessageText(""); } }
+      });
+    }} />}
+  </main>;
 }
-
 export default ChatWorkspace;

@@ -234,27 +234,27 @@
 
 .avatar-orange {
   background: #d27b56;
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 .avatar-blue {
   background: #7896d2;
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 .avatar-purple {
   background: #9277ca;
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 .avatar-yellow {
   background: #d1a456;
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 .avatar-green {
   background: #6ba27f;
-  color: var(--white);
+  color: var(--on-accent);
 }
 
 /* =========================

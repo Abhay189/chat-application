@@ -173,3 +173,5 @@
     border-radius: 16px;
   }
 }
+
+.avatar-olive { color: var(--on-accent); }

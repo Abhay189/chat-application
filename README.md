@@ -1,35 +1,47 @@
-# Chat application local setup (Windows PowerShell)
+# Chat application
 
-The frontend uses React/Vite; the backend uses Flask and PostgreSQL.
+React/Vite frontend, Flask API, and PostgreSQL 17. User accounts, hashed passwords, login sessions, contacts, profile photos, settings, conversations, messages, unread markers, blocks, and attachments are stored in PostgreSQL.
 
-## Prerequisites
+## Run on this computer
 
-- Node.js compatible with the engines in `frontend/package-lock.json` (the installed Node 26.13.1 builds successfully).
-- Python 3.12 and pip (verified with Python 3.12.6).
-- A running PostgreSQL server (PostgreSQL 17 is installed locally and accepts connections on port 5432).
+The dependencies and database migrations have already been installed/applied during the readiness work. Stop the old backend with Ctrl+C before restarting; the new session implementation requires logging in again.
 
-## Install dependencies
+From the repository root, terminal 1:
 
-From the repository root:
+```powershell
+backend/venv/Scripts/python.exe -m flask --app backend/app.py migrate
+backend/venv/Scripts/python.exe backend/serve.py
+```
+
+Terminal 2:
+
+```powershell
+cd frontend
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+Open **http://127.0.0.1:5173**. Use the same hostname for frontend and backend locally; mixing localhost and 127.0.0.1 breaks cookie authentication. Development cookies use HTTP; production cookies require HTTPS.
+
+## Fresh installation
+
+Use Python 3.12+, a Node version supported by Vite (the lockfile declares supported engines; Node 26.13.1 was tested), and PostgreSQL 17. From the repository root:
 
 ```powershell
 python -m venv backend/venv
+backend/venv/Scripts/python.exe -m pip install --upgrade pip
 backend/venv/Scripts/python.exe -m pip install -r backend/requirements.txt
-Set-Location frontend
+cd frontend
 npm ci
-Set-Location ..
+cd ..
 ```
 
-## Set up PostgreSQL
-
-The PostgreSQL tools are installed outside PATH. For this terminal:
+Create a dedicated database role and database using an administrator connection:
 
 ```powershell
-$env:Path = 'C:\Program Files\PostgreSQL\17\bin;' + $env:Path
-psql -h 127.0.0.1 -U postgres -d postgres
+& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -h 127.0.0.1 -U postgres -d postgres
 ```
 
-Enter the PostgreSQL administrator password chosen during installation. Inside psql, run these statements individually:
+Run each statement individually:
 
 ```sql
 CREATE ROLE chat_app LOGIN;
@@ -38,50 +50,58 @@ CREATE DATABASE chat_application OWNER chat_app;
 \q
 ```
 
-The `\password` command prompts for a new application password without putting it into command history. If the role or database already exists, inspect it rather than recreating it.
-
-Initialize the new, empty database from the repository root:
+Copy `backend/.env.example` to `backend/.env` if it does not exist. Fill in the database password and generate a secret:
 
 ```powershell
-psql -h 127.0.0.1 -U chat_app -d chat_application -v ON_ERROR_STOP=1 -1 -f backend/database/schema.sql
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Do this once; the schema script is not idempotent. Do not import `seed.sql` for login testing: it contains plaintext passwords, while the application requires password hashes. Register users through the app instead.
+Set that value as `JWT_SECRET_KEY`; keep it stable across restarts. Environment variables override `.env`. The application fails startup if the secret is missing or too short. Do not commit `.env`. Never use a PostgreSQL administrator role for the running app.
 
-If you do not know the existing postgres administrator password, use an existing authenticated pgAdmin connection or recover access before proceeding. The Windows account password is not necessarily the PostgreSQL password.
-
-## Backend configuration
-
-Copy `backend/.env.example` to `backend/.env` if the latter does not exist. A local `.env` with a generated JWT secret was created during the prerequisite review. Set:
-
-```dotenv
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_NAME=chat_application
-DB_USER=chat_app
-DB_PASSWORD=your-application-role-password
-JWT_SECRET_KEY=your-random-secret-at-least-32-characters
-```
-
-Keep the generated JWT secret if one is already present. `.env` is excluded from Git.
-
-## Run
-
-Terminal 1, from the repository root:
+Apply migrations, for either a new or existing database:
 
 ```powershell
-backend/venv/Scripts/python.exe backend/app.py
+backend/venv/Scripts/python.exe -m flask --app backend/app.py migrate
 ```
 
-Terminal 2, from the repository root:
+Migrations run atomically, track applied versions, and preserve existing records. Back up before upgrades. Case-insensitive username/email indexes deliberately reject an upgrade if existing records differ only in case; resolve those duplicates before retrying. `database/schema.sql` is the legacy initial schema; use migrations for complete setup. `database/seed.sql` contains legacy sample plaintext passwords and should not be imported; register accounts in the app.
 
-```powershell
-Set-Location frontend
-npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
-```
+## Using the app
 
-Open http://127.0.0.1:5173. Use this exact origin because the backend CORS configuration allows it. The frontend API URL is fixed to http://127.0.0.1:5000. Register two accounts to test chatting.
+- Registration requires name, username, a valid email format, and a password of 8 to 128 characters. Phone and date of birth are optional. Usernames and emails are unique without regard to case.
+- Log in with email/password. A 12-hour HttpOnly cookie restores the session after refresh. CSRF protection applies to authenticated writes. Logout revokes the session in PostgreSQL. Password changes revoke other sessions.
+- Open **+** to manage contacts. Search at least two characters of a username or email, add the person, then choose the chat icon. Contacts are private to each account. Removing a contact preserves message history.
+- Messages synchronize by polling (about 2.5 seconds in the open conversation and 4 seconds for the chat list). Send, reply, edit, delete, and download attachments. Only senders can change their messages; only participants can read a conversation or its files. Attachments are limited to 5 MB and stored as bytes in PostgreSQL.
+- Edit name, username, email, phone, date of birth, biography, photo, and password in Profile. Changing email or password requires the current password. Profile photos accept PNG/JPEG/WebP, at most 2 MB and 16 megapixels.
+- Theme, notification, and sound preferences persist per account. Browser notifications require browser permission and an open application tab; these are background-tab alerts, not offline push notifications. Browsers require user interaction before allowing sound. Block users from a conversation and unblock from Settings.
 
 ## Verification
 
-`npm run build` and `backend/venv/Scripts/python.exe -m pip check` pass. The backend health route and CORS preflight pass using Flask's test client. These checks do not verify database credentials or tables. Existing frontend lint issues remain (12 errors and 2 warnings during review).
+```powershell
+npm --prefix frontend run lint
+npm --prefix frontend run build
+backend/venv/Scripts/python.exe -m pip check
+backend/venv/Scripts/python.exe -m unittest discover -s backend/tests -v
+```
+
+PostgreSQL integration tests use a random isolated schema, never your account tables:
+
+```powershell
+$env:TEST_POSTGRES='1'
+backend/venv/Scripts/python.exe -m unittest discover -s backend/tests -v
+Remove-Item Env:TEST_POSTGRES
+```
+
+Browser tests start temporary servers on ports 5001 and 5174, use an isolated schema, and clean up afterward:
+
+```powershell
+backend/venv/Scripts/python.exe backend/tests/run_browser.py
+```
+
+The browser tests default to installed Microsoft Edge. On other systems install Chromium with `cd frontend; npx playwright install chromium`, and set `PLAYWRIGHT_CHANNEL=chromium` before invoking the runner. Test artifacts are in `frontend/test-results`. The test role needs permission to create/drop schemas in its test database. Do not run integration tests against a deployment without an isolated testing database and role.
+
+Readiness evidence: 19 API/integration tests, two browser scenarios covering desktop/mobile and two separate users, frontend lint/build, dependency consistency, and production dependency vulnerability audits. Tests create synthetic accounts in temporary schemas and remove them; they do not change your real accounts.
+
+## Production deployment
+
+See [deploy/README.md](deploy/README.md). The repository includes a Waitress entry point and an HTTPS nginx example, but no public deployment has been configured or load-tested. Required email addresses are not email ownership verification. Email verification/recovery delivery, offline push, and end-to-end encryption are not implemented. Consider these product requirements before public launch; do not market features that are absent.

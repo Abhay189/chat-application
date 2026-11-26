@@ -1,9 +1,9 @@
 import { useState } from "react";
 import "./NavigationRail.css";
-import { Home , MessageCircle, Bell, Settings , LogOut } from "lucide-react";
+import { Home , MessageCircle, Settings , LogOut } from "lucide-react";
 import ConfirmationDialog from "./ConfirmationDialog";
 
-function NavigationRail({ activeView , setActiveView, onLogout, onHomeClick }) {
+function NavigationRail({ user, activeView , setActiveView, onLogout, onHomeClick }) {
 
   const [ showLogoutDialog, setShowLogoutDialog] = useState(false);
 
@@ -20,7 +20,7 @@ function NavigationRail({ activeView , setActiveView, onLogout, onHomeClick }) {
         aria-label="Profile"
         onClick={()=> setActiveView("profile")}
       >
-        A
+        {user?.name?.charAt(0).toUpperCase() || "?"}
       </button>
 
       {/* Main Navigation */}
@@ -58,7 +58,7 @@ function NavigationRail({ activeView , setActiveView, onLogout, onHomeClick }) {
           aria-label="Profile"
           onClick={()=> setActiveView("profile")}
         >
-          <span className="profile-icon">A</span>
+          <span className="profile-icon">{user?.name?.charAt(0).toUpperCase() || "?"}</span>
         </button>
 
         <button 

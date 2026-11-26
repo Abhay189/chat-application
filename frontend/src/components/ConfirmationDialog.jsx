@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useDialogFocus } from "../services/useDialogFocus";
 import { createPortal } from "react-dom";
 import "./ConfirmationDialog.css";
 
@@ -12,6 +13,8 @@ function ConfirmationDialog({
   danger= false,
   }) {
 
+    const dialogRef = useRef(null);
+    useDialogFocus(dialogRef);
     useEffect(()=>{
       const handleEscape =(event) =>{
         if (event.key === "Escape"){
@@ -36,6 +39,7 @@ function ConfirmationDialog({
         }}
       >
         <section
+          ref={dialogRef}
           className="confirmation-dialog"
           role="alertdialog"
           aria-modal= "true"

@@ -55,10 +55,15 @@ function Profile( {onLogout, authToken} ){
         phone_no: updatedProfile.phone.trim(),
         dob: updatedProfile.dob,
         bio: updatedProfile.bio,
+        email: updatedProfile.email.trim(),
+        profile_picture: updatedProfile.profile_picture,
+        ...(updatedProfile.current_password ? { current_password: updatedProfile.current_password } : {}),
+        ...(updatedProfile.new_password ? { new_password: updatedProfile.new_password } : {}),
       },
     });
     const user = await apiRequest("/users/me", { token: authToken });
     setProfile(toProfile(user));
+    window.dispatchEvent(new Event("profile-changed"));
     setIsEditing(false);
   };
 
@@ -82,7 +87,7 @@ function Profile( {onLogout, authToken} ){
     <main className="profile-page">
       <section className="profile-card">
         <div className="profile-header">
-          <div className="profile-avatar" aria-label="Profile Avatar"/>
+          <div className="profile-avatar" aria-label="Profile avatar">{profile.profile_picture && <img src={profile.profile_picture} alt="Your profile" />}</div>
           <div className="profile-identity">
             <h2>{profile.name}</h2>
             <p>@{profile.username}</p>

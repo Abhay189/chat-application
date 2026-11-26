@@ -303,3 +303,10 @@
     padding: 8px;
   }
 }
+
+.settings-card .settings-row + .settings-row { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.settings-row-info { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .settings-section:has(.settings-theme-options) .settings-card { flex-direction: column; align-items: stretch; }
+  .settings-section:has(.settings-theme-options) .settings-theme-options { justify-content: center; }
+}

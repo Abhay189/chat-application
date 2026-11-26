@@ -6,6 +6,10 @@ function EditProfile({ profile, onSave, onCancel }) {
   const [error, setError] = useState("");
   const [formData , setFormData] = useState({
     name: profile.name,
+    email: profile.email,
+    current_password: "",
+    new_password: "",
+    profile_picture: profile.profile_picture || "",
     username: profile.username,
     bio: profile.bio,
     phone: profile.phone,
@@ -43,16 +47,23 @@ function EditProfile({ profile, onSave, onCancel }) {
         </header>
 
         <div className="edit-avatar-section">
-          <div className="edit-profile-avatar"/>
-            <button 
-              type="button"
-              className="change-photo-button"
-              onClick={() => alert("Photo upload will be added later")}
-            >
-              Change photo
-            </button>
+          <div className="edit-profile-avatar">{formData.profile_picture && <img src={formData.profile_picture} alt="Profile preview" />}</div>
+          <label className="change-photo-button">Change photo
+            <input type="file" accept="image/png,image/jpeg,image/webp" disabled={saving} onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              if (file.size > 2 * 1024 * 1024) { setError("Photo must be at most 2 MB."); return; }
+              const reader = new FileReader();
+              reader.onload = () => setFormData((previous) => ({ ...previous, profile_picture: reader.result }));
+              reader.onerror = () => setError("Could not read the selected photo.");
+              reader.readAsDataURL(file);
+            }} />
+          </label>
+          {formData.profile_picture && <button type="button" disabled={saving} onClick={() => setFormData((previous) => ({ ...previous, profile_picture: "" }))}>Remove photo</button>}
         </div>
-
+        <div className="edit-form-field"><label htmlFor="edit-email">Email</label><input id="edit-email" name="email" type="email" value={formData.email} onChange={handleChange} required maxLength={255} /></div>
+        <div className="edit-form-field"><label htmlFor="edit-current-password">Current password (required to change email or password)</label><input id="edit-current-password" name="current_password" type="password" autoComplete="current-password" value={formData.current_password} onChange={handleChange} maxLength={128} /></div>
+        <div className="edit-form-field"><label htmlFor="edit-new-password">New password (optional, at least 8 characters)</label><input id="edit-new-password" name="new_password" type="password" autoComplete="new-password" value={formData.new_password} onChange={handleChange} minLength={8} maxLength={128} /></div>
         <div className="edit-form-field">
           <label htmlFor="edit-name">Name</label>
           <input 

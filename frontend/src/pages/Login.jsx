@@ -8,15 +8,18 @@ function Login({ onLogin, onOpenRegister }) {
   const [password, setPassword ] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
 
     if (!email.trim() || !password) {
       setError("Please enter your email and password.");
       return;
     }
     setError("");
+    setSubmitting(true);
     try {
       const result = await loginUser({
         email: email.trim(),
@@ -26,8 +29,10 @@ function Login({ onLogin, onOpenRegister }) {
       if(onLogin){
         onLogin(result);
       }
-    }catch (error) {
+    } catch (error) {
       setError(error.message || "Login failed.Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
   
@@ -89,6 +94,7 @@ function Login({ onLogin, onOpenRegister }) {
           <button
             type="submit"
             className="auth-submit"
+            disabled={submitting}
           >
             Log in
           </button>
